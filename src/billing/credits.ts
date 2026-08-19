@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AsinApiDb } from "../db.js";
 
 export const PRODUCT_CREDIT_COST = 1;
+export const REVIEW_CREDIT_COST = 1;
 
 export type ChargeInput = {
   keyId: string;

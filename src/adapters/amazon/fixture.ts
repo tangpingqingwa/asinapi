@@ -1,8 +1,12 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Product, ProductBsr } from "../../types.js";
-import type { AdapterResult, ProductAdapter } from "../types.js";
+import type { Product, ProductBsr, Review, ReviewPage, ReviewSort } from "../../types.js";
+import type {
+  AdapterResult,
+  ProductAdapter,
+  ReviewsAdapterResult,
+} from "../types.js";
 
 export const DEFAULT_FIXTURE_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -17,7 +21,11 @@ const DEFAULT_FETCHED_AT = "2026-01-15T12:00:00.000Z";
 type FixtureIndex = {
   htmlByAsin: Map<string, string>;
   shortToAsin: Map<string, string>;
+  reviewsHtml: Map<string, string>;
 };
+
+const REVIEW_FILE_RE =
+  /^([A-Za-z0-9]{10})\.p([1-9][0-9]*)\.(helpful|recent)\.html$/i;
 
 export type FixtureAdapterOptions = {
   dir?: string;
@@ -42,15 +50,47 @@ export function createFixtureAdapter(
       }
       return parseProductHtml(request.asin, html);
     },
+    async fetchReviews(request): Promise<ReviewsAdapterResult> {
+      const productHtml = index.htmlByAsin.get(request.asin);
+      if (productHtml === undefined) {
+        return { ok: false, code: "product_unavailable" };
+      }
+      if (isBlocked(productHtml)) {
+        return { ok: false, code: "upstream_blocked" };
+      }
+      if (isUnavailablePage(productHtml)) {
+        return { ok: false, code: "product_unavailable" };
+      }
+      const reviewHtml = index.reviewsHtml.get(
+        reviewsFixtureKey(request.asin, request.page, request.sort),
+      );
+      if (reviewHtml === undefined) {
+        return {
+          ok: true,
+          page: emptyReviewPage(request.page),
+        };
+      }
+      return parseReviewsHtml(request.page, reviewHtml);
+    },
   };
+}
+
+export function reviewsFixtureKey(
+  asin: string,
+  page: number,
+  sort: ReviewSort,
+): string {
+  return `${asin.toUpperCase()}:${page}:${sort}`;
 }
 
 export function loadFixtureIndex(dir: string, htmlDir: string): FixtureIndex {
   const htmlByAsin = new Map<string, string>();
   const shortToAsin = new Map<string, string>();
+  const reviewsHtml = new Map<string, string>();
 
+  const productFileRe = /^[A-Za-z0-9]{10}\.html$/;
   const htmlFiles = readdirSync(htmlDir)
-    .filter((name) => name.endsWith(".html"))
+    .filter((name) => productFileRe.test(name))
     .sort();
   for (const file of htmlFiles) {
     const asin = file.replace(/\.html$/, "").toUpperCase();
@@ -58,6 +98,27 @@ export function loadFixtureIndex(dir: string, htmlDir: string): FixtureIndex {
       throw new Error(`duplicate fixture HTML for ${asin}`);
     }
     htmlByAsin.set(asin, readFileSync(join(htmlDir, file), "utf8"));
+  }
+
+  const reviewsDir = join(htmlDir, "reviews");
+  if (existsSync(reviewsDir)) {
+    const reviewFiles = readdirSync(reviewsDir)
+      .filter((name) => name.endsWith(".html"))
+      .sort();
+    for (const file of reviewFiles) {
+      const parsed = REVIEW_FILE_RE.exec(file);
+      if (parsed === null || parsed[1] === undefined || parsed[2] === undefined) {
+        throw new Error(`review fixture name must be ASIN.pN.sort.html: ${file}`);
+      }
+      const asin = parsed[1].toUpperCase();
+      const page = Number(parsed[2]);
+      const sort = parsed[3]?.toLowerCase() as ReviewSort;
+      const key = reviewsFixtureKey(asin, page, sort);
+      if (reviewsHtml.has(key)) {
+        throw new Error(`duplicate review fixture for ${key}`);
+      }
+      reviewsHtml.set(key, readFileSync(join(reviewsDir, file), "utf8"));
+    }
   }
 
   const shortPath = join(dir, "short-links.json");
@@ -75,7 +136,231 @@ export function loadFixtureIndex(dir: string, htmlDir: string): FixtureIndex {
     shortToAsin.set(code, asin.toUpperCase());
   }
 
-  return { htmlByAsin, shortToAsin };
+  return { htmlByAsin, shortToAsin, reviewsHtml };
+}
+
+export function parseReviewsHtml(
+  page: number,
+  html: string,
+): ReviewsAdapterResult {
+  if (isBlocked(html)) {
+    return { ok: false, code: "upstream_blocked" };
+  }
+  if (isUnavailablePage(html)) {
+    return { ok: false, code: "product_unavailable" };
+  }
+
+  const reviews: Review[] = [];
+  const articleRe =
+    /<article\b([^>]*data-hook=["']review["'][^>]*)>([\s\S]*?)<\/article>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = articleRe.exec(html)) !== null) {
+    const review = parseReviewArticle(match[1] ?? "", match[2] ?? "");
+    if (review !== null) {
+      reviews.push(review);
+    }
+  }
+
+  return {
+    ok: true,
+    page: {
+      page,
+      hasMore: extractHasMore(html),
+      reviews,
+    },
+  };
+}
+
+function emptyReviewPage(page: number): ReviewPage {
+  return { page, hasMore: false, reviews: [] };
+}
+
+function parseReviewArticle(openTag: string, inner: string): Review | null {
+  const stars = extractReviewStars(openTag, inner);
+  if (stars === null) {
+    return null;
+  }
+  return {
+    id: extractReviewId(openTag, inner),
+    title: textByHook(inner, "review-title"),
+    body: textByHook(inner, "review-body") ?? "",
+    stars,
+    createdAt: extractReviewCreatedAt(inner),
+    verified: extractVerified(inner),
+    author: extractReviewAuthor(inner),
+    country: extractReviewCountry(inner),
+  };
+}
+
+function extractReviewId(openTag: string, inner: string): string | null {
+  const dataId = attr(openTag, "data-review-id") ?? attr(openTag, "id");
+  if (dataId !== null && dataId !== "") {
+    return dataId.replace(/^customer_review-/, "");
+  }
+  const innerId = firstMatch(
+    inner,
+    /id=["'](?:customer_review-)?(R[A-Z0-9]+)["']/i,
+  );
+  return innerId;
+}
+
+function extractReviewStars(openTag: string, inner: string): number | null {
+  const dataStars = attr(openTag, "data-stars");
+  if (dataStars !== null) {
+    return parseStars(dataStars);
+  }
+  const labeled =
+    firstMatch(inner, /([1-5](?:\.[0-9]+)?)\s+out of 5(?:\s+stars)?/i) ??
+    firstMatch(inner, /data-stars=["']([1-5](?:\.[0-9]+)?)["']/i);
+  return labeled === null ? null : parseStars(labeled);
+}
+
+function parseStars(raw: string): number | null {
+  const stars = Number(raw);
+  if (!Number.isFinite(stars) || stars < 1 || stars > 5) {
+    return null;
+  }
+  return stars;
+}
+
+function extractReviewCreatedAt(inner: string): string | null {
+  const iso = attrFromHook(inner, "review-date", "datetime");
+  if (iso !== null && iso !== "") {
+    return iso;
+  }
+  const raw = textByHook(inner, "review-date");
+  if (raw === null || raw === "") {
+    return null;
+  }
+  const parsed = parseReviewDate(raw);
+  return parsed ?? raw;
+}
+
+function parseReviewDate(raw: string): string | null {
+  const match =
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+([0-9]{1,2}),\s+([0-9]{4})\b/i.exec(
+      raw,
+    );
+  if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined) {
+    return null;
+  }
+  const months: Record<string, string> = {
+    january: "01",
+    february: "02",
+    march: "03",
+    april: "04",
+    may: "05",
+    june: "06",
+    july: "07",
+    august: "08",
+    september: "09",
+    october: "10",
+    november: "11",
+    december: "12",
+  };
+  const month = months[match[1].toLowerCase()];
+  if (month === undefined) {
+    return null;
+  }
+  const day = match[2].padStart(2, "0");
+  return `${match[3]}-${month}-${day}`;
+}
+
+function extractVerified(inner: string): boolean | null {
+  if (/not a verified purchase/i.test(inner)) {
+    return false;
+  }
+  if (
+    /data-hook=["']avp-badge["']/i.test(inner) ||
+    /verified purchase/i.test(inner)
+  ) {
+    return true;
+  }
+  return null;
+}
+
+function extractReviewAuthor(inner: string): string | null {
+  const named = firstMatch(
+    inner,
+    /<span\b[^>]*class=["'][^"']*a-profile-name[^"']*["'][^>]*>([\s\S]*?)<\/span>/i,
+  );
+  if (named !== null) {
+    const text = decode(named);
+    return text === "" ? null : text;
+  }
+  return textByHook(inner, "review-author");
+}
+
+function extractReviewCountry(inner: string): string | null {
+  const dataCountry = firstMatch(
+    inner,
+    /data-hook=["']review-date["'][^>]*data-country=["']([^"']+)["']/i,
+  );
+  if (dataCountry !== null && dataCountry !== "") {
+    return decode(dataCountry);
+  }
+  const raw = textByHook(inner, "review-date") ?? "";
+  const match = /reviewed in the (.+?) on /i.exec(raw);
+  if (match?.[1] === undefined) {
+    return null;
+  }
+  const country = match[1].trim();
+  return country === "" ? null : country;
+}
+
+function extractHasMore(html: string): boolean {
+  const meta = metaContent(html, "asinapi-has-more");
+  if (meta !== null) {
+    return /^(1|true|yes)$/i.test(meta);
+  }
+  return /<li\b[^>]*class=["'][^"']*a-last[^"']*["'][^>]*>\s*<a\b/i.test(html);
+}
+
+function textByHook(html: string, hook: string): string | null {
+  const inner = innerByHook(html, hook);
+  if (inner === null) {
+    return null;
+  }
+  const text = decode(inner);
+  return text === "" ? null : text;
+}
+
+function attrFromHook(
+  html: string,
+  hook: string,
+  name: string,
+): string | null {
+  const tag = tagByHook(html, hook);
+  return tag === null ? null : attr(tag, name);
+}
+
+function innerByHook(html: string, hook: string): string | null {
+  const tag = tagByHook(html, hook);
+  if (tag === null) {
+    return null;
+  }
+  const open = html.indexOf(tag);
+  if (open < 0) {
+    return null;
+  }
+  const afterOpen = open + tag.length;
+  const nameMatch = /^<([a-z0-9]+)/i.exec(tag);
+  if (nameMatch?.[1] === undefined) {
+    return null;
+  }
+  const close = new RegExp(`</${nameMatch[1]}>`, "i").exec(html.slice(afterOpen));
+  if (close === null || close.index === undefined) {
+    return null;
+  }
+  return html.slice(afterOpen, afterOpen + close.index);
+}
+
+function tagByHook(html: string, hook: string): string | null {
+  const re = new RegExp(
+    `<[a-z0-9]+\\b[^>]*data-hook=["']${escapeRegExp(hook)}["'][^>]*>`,
+    "i",
+  );
+  return firstMatch(html, re);
 }
 
 export function parseProductHtml(asin: string, html: string): AdapterResult {

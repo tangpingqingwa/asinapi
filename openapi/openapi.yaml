@@ -115,6 +115,58 @@ paths:
           $ref: "#/components/responses/Internal"
         "503":
           $ref: "#/components/responses/UpstreamBlocked"
+  /v1/products/{asin}/reviews:
+    get:
+      operationId: getProductReviews
+      summary: Review page by ASIN
+      description: >
+        One credit per page on success, including cache hits. page is 1-based.
+        An empty recorded page is 200 with reviews=[] and hasMore=false.
+        Reviews are never invented.
+      parameters:
+        - name: asin
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9]{10}$"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - helpful
+              - recent
+            default: helpful
+      responses:
+        "200":
+          description: Recorded review page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewPageEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+        "404":
+          $ref: "#/components/responses/ProductUnavailable"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/UpstreamBlocked"
 components:
   securitySchemes:
     bearerAuth:
@@ -303,6 +355,76 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Product"
+        meta:
+          $ref: "#/components/schemas/SuccessMeta"
+    Review:
+      type: object
+      additionalProperties: false
+      description: Honest review fields. Missing values stay null. Never invent a review.
+      required:
+        - id
+        - title
+        - body
+        - stars
+        - createdAt
+        - verified
+        - author
+        - country
+      properties:
+        id:
+          type:
+            - string
+            - "null"
+        title:
+          type:
+            - string
+            - "null"
+        body:
+          type: string
+        stars:
+          type: number
+          minimum: 1
+          maximum: 5
+        createdAt:
+          type:
+            - string
+            - "null"
+        verified:
+          type:
+            - boolean
+            - "null"
+        author:
+          type:
+            - string
+            - "null"
+        country:
+          type:
+            - string
+            - "null"
+    ReviewPage:
+      type: object
+      additionalProperties: false
+      required:
+        - page
+        - hasMore
+        - reviews
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        hasMore:
+          type: boolean
+        reviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/Review"
+    ReviewPageEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/ReviewPage"
         meta:
           $ref: "#/components/schemas/SuccessMeta"
     MeData:

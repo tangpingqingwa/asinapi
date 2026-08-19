@@ -476,6 +476,9 @@ test("forced adapter 503 is upstream_blocked and 0 credit", async () => {
     async fetchProduct(): Promise<AdapterResult> {
       return { ok: false, code: "upstream_blocked" };
     },
+    async fetchReviews() {
+      return { ok: false, code: "upstream_blocked" as const };
+    },
   };
   const { app, db } = await appWithKey(4, blocked);
   const keyRow = db.prepare<[], { id: string }>("SELECT id FROM keys").get();
@@ -591,7 +594,6 @@ test("OpenAPI freezes the product field list and every SPEC error code", () => {
   assert.match(spec, /marketplace_unsupported/);
   assert.match(spec, /invalid_asin/);
   assert.doesNotMatch(spec, /\/v1\/search/);
-  assert.doesNotMatch(spec, /\/reviews/);
   assert.doesNotMatch(spec, /\/offers/);
 });
 

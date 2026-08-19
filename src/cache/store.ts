@@ -4,12 +4,15 @@ import type { ErrorCode } from "../types.js";
 /** Price / unavailable is the shorter product TTL (SPEC §6). */
 export const PRODUCT_TTL_MS = 6 * 60 * 60 * 1000;
 export const PRODUCT_UNAVAILABLE_TTL_MS = 12 * 60 * 60 * 1000;
+/** Reviews cache by (asin, page, sort) (SPEC §6). */
+export const REVIEWS_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type CacheTombstoneCode = Extract<ErrorCode, "product_unavailable">;
 
 export type CacheLookup =
   | { hit: false }
   | { hit: true; kind: "product"; body: string }
+  | { hit: true; kind: "reviews"; body: string }
   | { hit: true; kind: "tombstone"; errorCode: CacheTombstoneCode };
 
 type CacheRow = {
@@ -21,6 +24,14 @@ type CacheRow = {
 
 export function productCacheKey(asin: string): string {
   return `product:US:${asin}`;
+}
+
+export function reviewsCacheKey(
+  asin: string,
+  page: number,
+  sort: string,
+): string {
+  return `reviews:US:${asin}:${page}:${sort}`;
 }
 
 export function getCacheEntry(
@@ -40,6 +51,9 @@ export function getCacheEntry(
   if (row.kind === "product" && row.body !== null) {
     return { hit: true, kind: "product", body: row.body };
   }
+  if (row.kind === "reviews" && row.body !== null) {
+    return { hit: true, kind: "reviews", body: row.body };
+  }
   if (row.kind === "tombstone" && row.error_code === "product_unavailable") {
     return { hit: true, kind: "tombstone", errorCode: row.error_code };
   }
@@ -56,6 +70,22 @@ export function setProductCache(
   upsertCache(db, {
     cacheKey,
     kind: "product",
+    body,
+    errorCode: null,
+    expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
+  });
+}
+
+export function setReviewsCache(
+  db: AsinApiDb,
+  cacheKey: string,
+  body: string,
+  now: Date = new Date(),
+  ttlMs: number = REVIEWS_TTL_MS,
+): void {
+  upsertCache(db, {
+    cacheKey,
+    kind: "reviews",
     body,
     errorCode: null,
     expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
