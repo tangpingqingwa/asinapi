@@ -1,4 +1,4 @@
-import type { Product, ReviewPage, ReviewSort } from "../types.js";
+import type { Product, ReviewPage, ReviewSort, SearchPage } from "../types.js";
 
 export type AdapterRequest = {
   asin: string;
@@ -9,6 +9,11 @@ export type ReviewsAdapterRequest = {
   asin: string;
   page: number;
   sort: ReviewSort;
+};
+
+export type SearchAdapterRequest = {
+  q: string;
+  page: number;
 };
 
 export type AdapterFailureCode =
@@ -40,9 +45,22 @@ export type ReviewsAdapterErr = {
 
 export type ReviewsAdapterResult = ReviewsAdapterOk | ReviewsAdapterErr;
 
+export type SearchAdapterOk = {
+  ok: true;
+  page: SearchPage;
+};
+
+export type SearchAdapterErr = {
+  ok: false;
+  code: AdapterFailureCode;
+};
+
+export type SearchAdapterResult = SearchAdapterOk | SearchAdapterErr;
+
 export type ProductAdapter = {
   /** Map an amzn.to path to a canonical ASIN when the fixture already resolved it. */
   resolveShortCode(code: string): string | null;
   fetchProduct(request: AdapterRequest): Promise<AdapterResult>;
   fetchReviews(request: ReviewsAdapterRequest): Promise<ReviewsAdapterResult>;
+  fetchSearch(request: SearchAdapterRequest): Promise<SearchAdapterResult>;
 };

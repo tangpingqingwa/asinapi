@@ -1,11 +1,20 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Product, ProductBsr, Review, ReviewPage, ReviewSort } from "../../types.js";
+import type {
+  Product,
+  ProductBsr,
+  Review,
+  ReviewPage,
+  ReviewSort,
+  SearchPage,
+  SearchResult,
+} from "../../types.js";
 import type {
   AdapterResult,
   ProductAdapter,
   ReviewsAdapterResult,
+  SearchAdapterResult,
 } from "../types.js";
 
 export const DEFAULT_FIXTURE_DIR = join(
@@ -22,7 +31,10 @@ type FixtureIndex = {
   htmlByAsin: Map<string, string>;
   shortToAsin: Map<string, string>;
   reviewsHtml: Map<string, string>;
+  searchHtml: Map<string, string>;
 };
+
+const SEARCH_FILE_RE = /^([a-z0-9][a-z0-9-]*)\.p([1-9][0-9]*)\.html$/i;
 
 const REVIEW_FILE_RE =
   /^([A-Za-z0-9]{10})\.p([1-9][0-9]*)\.(helpful|recent)\.html$/i;
@@ -72,6 +84,15 @@ export function createFixtureAdapter(
       }
       return parseReviewsHtml(request.page, reviewHtml);
     },
+    async fetchSearch(request): Promise<SearchAdapterResult> {
+      const html = index.searchHtml.get(
+        searchFixtureKey(request.q, request.page),
+      );
+      if (html === undefined) {
+        return { ok: true, page: emptySearchPage(request.q, request.page) };
+      }
+      return parseSearchHtml(request.q, request.page, html);
+    },
   };
 }
 
@@ -83,10 +104,23 @@ export function reviewsFixtureKey(
   return `${asin.toUpperCase()}:${page}:${sort}`;
 }
 
+export function normalizeSearchSlug(q: string): string {
+  return q
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+}
+
+export function searchFixtureKey(q: string, page: number): string {
+  return `${normalizeSearchSlug(q)}:${page}`;
+}
+
 export function loadFixtureIndex(dir: string, htmlDir: string): FixtureIndex {
   const htmlByAsin = new Map<string, string>();
   const shortToAsin = new Map<string, string>();
   const reviewsHtml = new Map<string, string>();
+  const searchHtml = new Map<string, string>();
 
   const productFileRe = /^[A-Za-z0-9]{10}\.html$/;
   const htmlFiles = readdirSync(htmlDir)
@@ -121,6 +155,26 @@ export function loadFixtureIndex(dir: string, htmlDir: string): FixtureIndex {
     }
   }
 
+  const searchDir = join(htmlDir, "search");
+  if (existsSync(searchDir)) {
+    const searchFiles = readdirSync(searchDir)
+      .filter((name) => name.endsWith(".html"))
+      .sort();
+    for (const file of searchFiles) {
+      const parsed = SEARCH_FILE_RE.exec(file);
+      if (parsed === null || parsed[1] === undefined || parsed[2] === undefined) {
+        throw new Error(`search fixture name must be slug.pN.html: ${file}`);
+      }
+      const slug = parsed[1].toLowerCase();
+      const page = Number(parsed[2]);
+      const key = `${slug}:${page}`;
+      if (searchHtml.has(key)) {
+        throw new Error(`duplicate search fixture for ${key}`);
+      }
+      searchHtml.set(key, readFileSync(join(searchDir, file), "utf8"));
+    }
+  }
+
   const shortPath = join(dir, "short-links.json");
   const raw: unknown = JSON.parse(readFileSync(shortPath, "utf8"));
   if (!isRecord(raw)) {
@@ -136,7 +190,7 @@ export function loadFixtureIndex(dir: string, htmlDir: string): FixtureIndex {
     shortToAsin.set(code, asin.toUpperCase());
   }
 
-  return { htmlByAsin, shortToAsin, reviewsHtml };
+  return { htmlByAsin, shortToAsin, reviewsHtml, searchHtml };
 }
 
 export function parseReviewsHtml(
@@ -173,6 +227,101 @@ export function parseReviewsHtml(
 
 function emptyReviewPage(page: number): ReviewPage {
   return { page, hasMore: false, reviews: [] };
+}
+
+function emptySearchPage(q: string, page: number): SearchPage {
+  return { q, page, hasMore: false, results: [] };
+}
+
+export function parseSearchHtml(
+  q: string,
+  page: number,
+  html: string,
+): SearchAdapterResult {
+  if (isBlocked(html)) {
+    return { ok: false, code: "upstream_blocked" };
+  }
+  if (isUnavailablePage(html)) {
+    return { ok: false, code: "product_unavailable" };
+  }
+
+  const results: SearchResult[] = [];
+  const cardRe = /<article\b([^>]*data-hook=["']search-result["'][^>]*)>([\s\S]*?)<\/article>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = cardRe.exec(html)) !== null) {
+    const result = parseSearchCard(match[1] ?? "", match[2] ?? "");
+    if (result !== null) {
+      results.push(result);
+    }
+  }
+
+  return {
+    ok: true,
+    page: {
+      q,
+      page,
+      hasMore: extractHasMore(html),
+      results,
+    },
+  };
+}
+
+function parseSearchCard(openTag: string, inner: string): SearchResult | null {
+  const asinRaw = attr(openTag, "data-asin");
+  if (asinRaw === null || asinRaw === "") {
+    return null;
+  }
+  const asin = asinRaw.toUpperCase();
+  if (!/^[A-Z0-9]{10}$/.test(asin)) {
+    return null;
+  }
+  const title =
+    firstMatch(
+      inner,
+      /<h2\b[^>]*>[\s\S]*?<span\b[^>]*>([\s\S]*?)<\/span>/i,
+    ) ?? firstMatch(inner, /<h2\b[^>]*>([\s\S]*?)<\/h2>/i);
+  const decodedTitle = title === null ? "" : decode(title);
+  if (decodedTitle === "") {
+    return null;
+  }
+  const href = firstMatch(inner, /href=["']([^"']+)["']/i);
+  const image =
+    firstMatch(inner, /<img\b[^>]*class=["'][^"']*s-image[^"']*["'][^>]*src=["']([^"']+)["']/i) ??
+    firstMatch(inner, /<img\b[^>]*src=["']([^"']+)["']/i);
+  const priceDisplay = firstMatch(
+    inner,
+    /<span[^>]*class=["'][^"']*a-offscreen[^"']*["'][^>]*>([\s\S]*?)<\/span>/i,
+  );
+  const parsedPrice = parseUsd(decode(priceDisplay ?? ""));
+  const unavailable =
+    /currently unavailable/i.test(inner) ||
+    /data-hook=["']search-unavailable["']/i.test(inner);
+  const averageRaw =
+    firstMatch(inner, /([0-9]+(?:\.[0-9]+)?)\s+out of 5(?:\s+stars)?/i);
+  const countRaw =
+    firstMatch(inner, /data-hook=["']search-rating-count["'][^>]*>([\s\S]*?)</i) ??
+    firstMatch(inner, /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s+ratings?/i);
+  return {
+    asin,
+    title: decodedTitle,
+    price: {
+      amount: unavailable ? null : parsedPrice.amount,
+      currency: "USD",
+      display: parsedPrice.display,
+      unavailable,
+    },
+    rating: {
+      average: averageRaw === null ? null : Number(averageRaw),
+      count:
+        countRaw === null ? null : Number(decode(countRaw).replace(/,/g, "")),
+    },
+    url:
+      href !== null && href.startsWith("http")
+        ? href
+        : `https://www.amazon.com/dp/${asin}`,
+    image:
+      image !== null && /^https?:\/\//i.test(image) ? image : null,
+  };
 }
 
 function parseReviewArticle(openTag: string, inner: string): Review | null {

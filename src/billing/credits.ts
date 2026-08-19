@@ -3,6 +3,7 @@ import type { AsinApiDb } from "../db.js";
 
 export const PRODUCT_CREDIT_COST = 1;
 export const REVIEW_CREDIT_COST = 1;
+export const SEARCH_CREDIT_PER_RESULT = 1;
 
 export type ChargeInput = {
   keyId: string;
