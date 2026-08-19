@@ -114,6 +114,38 @@ export const REVIEW_PAGE_FIELDS = [
   "reviews",
 ] as const satisfies readonly (keyof ReviewPage)[];
 
+export type SearchResult = {
+  asin: string;
+  title: string;
+  price: ProductPrice;
+  rating: ProductRating;
+  url: string;
+  image: string | null;
+};
+
+export const SEARCH_RESULT_FIELDS = [
+  "asin",
+  "title",
+  "price",
+  "rating",
+  "url",
+  "image",
+] as const satisfies readonly (keyof SearchResult)[];
+
+export type SearchPage = {
+  q: string;
+  page: number;
+  hasMore: boolean;
+  results: SearchResult[];
+};
+
+export const SEARCH_PAGE_FIELDS = [
+  "q",
+  "page",
+  "hasMore",
+  "results",
+] as const satisfies readonly (keyof SearchPage)[];
+
 export type Ok<T> = {
   data: T;
   meta: { cached: boolean; creditsCharged: number; requestId: string; upstreamMs: number };

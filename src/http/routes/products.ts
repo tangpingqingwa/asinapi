@@ -10,10 +10,15 @@ export const PRODUCT_REVIEWS_PATH = "/v1/products/:asin/reviews" as const;
 
 type ByUrlQuery = {
   url?: string;
+  fields?: string;
 };
 
 type AsinParams = {
   asin: string;
+};
+
+type ProductQuery = {
+  fields?: string;
 };
 
 type ReviewsQuery = {
@@ -35,6 +40,7 @@ export const productRoutes: FastifyPluginAsync = async (app) => {
         adapter: request.server.adapter,
         key,
         url: request.query.url,
+        fields: request.query.fields,
       });
       if ("error" in result) {
         return sendErr(
@@ -76,7 +82,7 @@ export const productRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.get<{ Params: AsinParams }>(
+  app.get<{ Params: AsinParams; Querystring: ProductQuery }>(
     PRODUCT_BY_ASIN_PATH,
     { preHandler: requireAuth },
     async (request, reply) => {
@@ -89,6 +95,7 @@ export const productRoutes: FastifyPluginAsync = async (app) => {
         adapter: request.server.adapter,
         key,
         asin: request.params.asin,
+        fields: request.query.fields,
       });
       if ("error" in result) {
         return sendErr(

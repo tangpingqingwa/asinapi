@@ -10,8 +10,12 @@ import { getCredits } from "../src/billing/credits.js";
 import { createKey } from "../src/billing/keys.js";
 import { openDatabase } from "../src/db.js";
 import { MCP_PATH, MCP_PROTOCOL_VERSION } from "../src/mcp/server.js";
-import { GET_PRODUCT_TOOL, LIST_REVIEWS_TOOL } from "../src/mcp/tools.js";
-import type { ErrorCode, Product, ReviewPage } from "../src/types.js";
+import {
+  GET_PRODUCT_TOOL,
+  LIST_REVIEWS_TOOL,
+  SEARCH_AMAZON_TOOL,
+} from "../src/mcp/tools.js";
+import type { ErrorCode, Product, ReviewPage, SearchPage } from "../src/types.js";
 
 const KEY = "ak_test_mcp_fixture";
 const BESTSELLER = "B0BESTSELL";
@@ -120,7 +124,8 @@ test("GET /llms.txt is public and matches the checked-in file", async () => {
   assert.match(onDisk, /not for checkout/i);
   assert.match(onDisk, /6h stale|6 hours stale/i);
   assert.match(onDisk, /Keepa/i);
-  assert.doesNotMatch(onDisk, /search_amazon tool is available/i);
+  assert.match(onDisk, /search_amazon/);
+  assert.match(onDisk, /1 credit per result/);
 });
 
 test("GET /.well-known/mcp/server-card.json lists shipped tools only", async () => {
@@ -132,10 +137,13 @@ test("GET /.well-known/mcp/server-card.json lists shipped tools only", async () 
   assert.equal(response.statusCode, 200);
   const card = response.json() as { tools: string[]; transport: string };
   assert.equal(card.transport, "streamable-http");
-  assert.deepEqual(card.tools, [GET_PRODUCT_TOOL, LIST_REVIEWS_TOOL]);
+  assert.deepEqual(card.tools, [
+    GET_PRODUCT_TOOL,
+    LIST_REVIEWS_TOOL,
+    SEARCH_AMAZON_TOOL,
+  ]);
   const names: string[] = card.tools.slice();
-  assert.equal(names.includes("search_amazon"), false);
-  assert.ok(!names.some((name) => name.startsWith("search")));
+  assert.equal(names.includes("search_amazon"), true);
   assert.ok(!names.some((name) => name.includes("offer")));
 });
 
@@ -148,7 +156,7 @@ test("POST /mcp without bearer is 401 with 0 credits", async () => {
   assert.equal(body.meta.creditsCharged, 0);
 });
 
-test("initialize and tools/list describe get_product and list_reviews, not search", async () => {
+test("initialize and tools/list describe get_product, list_reviews, and search_amazon", async () => {
   const { app } = await appWithKey();
 
   const init = await rpc(app, "initialize");
@@ -174,8 +182,12 @@ test("initialize and tools/list describe get_product and list_reviews, not searc
       tools: Array<{ name: string }>;
     }
   ).tools.map((tool) => tool.name);
-  assert.deepEqual(tools, [GET_PRODUCT_TOOL, LIST_REVIEWS_TOOL]);
-  assert.ok(!tools.some((name) => name.startsWith("search")));
+  assert.deepEqual(tools, [
+    GET_PRODUCT_TOOL,
+    LIST_REVIEWS_TOOL,
+    SEARCH_AMAZON_TOOL,
+  ]);
+  assert.ok(!tools.some((name) => name.includes("offer")));
 });
 
 test("MCP get_product returns the same payload as REST and charges 1", async () => {
@@ -363,9 +375,32 @@ test("MCP list_reviews errors match REST and charge 0", async () => {
   assert.equal(getCredits(db, key.id), 4);
 });
 
-test("unknown MCP tool and search_amazon are invalid_request with 0 credits", async () => {
+test("MCP search_amazon matches REST and charges 1 per result", async () => {
+  const { app, db, key } = await appWithKey(10);
+
+  const rest = await app.inject({
+    method: "GET",
+    url: "/v1/search?q=echo%20dot",
+    headers: auth(),
+  });
+  assert.equal(rest.statusCode, 200);
+  const restBody = rest.json() as OkBody<SearchPage>;
+  assert.equal(restBody.data.results.length, 2);
+  assert.equal(restBody.meta.creditsCharged, 2);
+  assert.equal(getCredits(db, key.id), 8);
+
+  const mcp = await callTool(app, SEARCH_AMAZON_TOOL, { q: "echo dot" });
+  assert.equal(mcp.isError, false);
+  const mcpBody = mcp.structuredContent as OkBody<SearchPage>;
+  assert.deepEqual(mcpBody.data, restBody.data);
+  assert.equal(mcpBody.meta.creditsCharged, 2);
+  assert.equal(mcpBody.meta.cached, true);
+  assert.equal(getCredits(db, key.id), 6);
+});
+
+test("unknown MCP tool and get_offers are invalid_request with 0 credits", async () => {
   const { app, db, key } = await appWithKey(5);
-  for (const name of ["search_amazon", "get_offers", "not_a_tool"]) {
+  for (const name of ["get_offers", "not_a_tool"]) {
     const result = await callTool(app, name, { asin: BESTSELLER });
     assert.equal(result.isError, true, name);
     const body = result.structuredContent as ErrBody;
@@ -388,7 +423,8 @@ test("HTTP and MCP call core only and never import adapters/amazon", () => {
   const tools = readFileSync(join(ROOT, "src/mcp/tools.ts"), "utf8");
   assert.match(tools, /getProduct/);
   assert.match(tools, /getReviews/);
-  assert.doesNotMatch(tools, /search_amazon/);
+  assert.match(tools, /searchProducts/);
+  assert.match(tools, /search_amazon/);
 });
 
 test("no live Amazon hosts are fetched from MCP sources", () => {

@@ -12,6 +12,10 @@ export type {
   ReviewsAdapterOk,
   ReviewsAdapterRequest,
   ReviewsAdapterResult,
+  SearchAdapterErr,
+  SearchAdapterOk,
+  SearchAdapterRequest,
+  SearchAdapterResult,
 } from "./types.js";
 export { createFixtureAdapter } from "./amazon/fixture.js";
 export { createLiveAmazonAdapter } from "./amazon/index.js";

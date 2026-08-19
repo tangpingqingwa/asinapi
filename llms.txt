@@ -29,7 +29,7 @@ Same key space for REST and MCP. No scopes. `ak_test_*` uses recorded fixtures a
 
 Maps to `GET /v1/products/{asin}` or `GET /v1/products/by-url`. **1 credit** on success, including cache hits.
 
-Arguments: `asin` and/or `url` (one required). Accepts `amazon.com/dp/`, `/gp/product/`, and already-resolved `amzn.to` maps.
+Arguments: `asin` and/or `url` (one required). Optional `fields` (comma-separated dotted product paths). Accepts `amazon.com/dp/`, `/gp/product/`, and already-resolved `amzn.to` maps.
 
 `data` is the frozen product record (title, price, rating, images as remote URLs, bullets, BSR only if visible). Prices / unavailable can be **6 hours stale**. Product title/bullets/images cache up to 24h. Do not claim Keepa-like history.
 
@@ -41,7 +41,11 @@ Arguments: `asin` (required), optional `page` (1-based, default 1), optional `so
 
 Empty page is `{ reviews: [], hasMore: false }`, never 404. Never invent a review.
 
-Search is not shipped. There is no `search_amazon` tool yet. Offers are not shipped.
+### search_amazon
+
+Maps to `GET /v1/search`. **1 credit per result returned**. Arguments: `q` (required), optional `page` (1-based, default 1, **max 5**), optional `fields`.
+
+Each result: asin, title, price, rating, url, image. A valid search page with hits charges `results.length`. Empty recorded pages still return `{ results: [], hasMore: false }` and charge 0. Search cache is 6h. Offers are not shipped.
 
 ## When not to call
 
@@ -50,7 +54,7 @@ Search is not shipped. There is no `search_amazon` tool yet. Offers are not ship
 - You need live tick-by-tick prices or BSR history graphs — we do not have Keepa-like history; prices can be 6h stale.
 - You need hosted Amazon image bytes — we return remote URLs only.
 - You need other sellers / buy box — offers are not implemented.
-- Keyword search — `search_amazon` is not shipped.
+- Keyword search beyond page 5 — v1 caps `page` at 5.
 
 ## Errors
 
@@ -73,4 +77,4 @@ Failed CAPTCHA / bot wall is `upstream_blocked` and costs **0 credits**. Never i
 
 ## Credits
 
-Free: 100 once. Monthly $19 / 2,000. Product 1. Reviews 1 / page. Failures cost 0.
+Free: 100 once. Monthly $19 / 2,000. Product 1. Reviews 1 / page. Search 1 / result. Failures cost 0.

@@ -10,13 +10,15 @@ import {
 } from "../cache/store.js";
 import type { AsinApiDb } from "../db.js";
 import type { Err, ErrorCode, Ok, Product } from "../types.js";
+import { PRODUCT_FIELD_SCHEMA } from "./field-schema.js";
+import { parseFields, projectFields } from "./fields.js";
 
 export const PRODUCT_BY_ASIN_ROUTE = "/v1/products/{asin}" as const;
 export const PRODUCT_BY_URL_ROUTE = "/v1/products/by-url" as const;
 
 export const ASIN_RE = /^[A-Z0-9]{10}$/;
 
-export type ProductOutcome = Ok<Product> | Err;
+export type ProductOutcome = Ok<Product | Record<string, unknown>> | Err;
 
 export type GetProductInput = {
   db: AsinApiDb;
@@ -25,6 +27,7 @@ export type GetProductInput = {
   asin: string;
   url?: string;
   route?: string;
+  fields?: string;
   requestId?: string;
 };
 
@@ -33,6 +36,7 @@ export type GetProductByUrlInput = {
   adapter: ProductAdapter;
   key: Key;
   url: string | undefined;
+  fields?: string;
   requestId?: string;
 };
 
@@ -157,7 +161,17 @@ export async function getProduct(input: GetProductInput): Promise<ProductOutcome
   if (asin === null) {
     return fail("invalid_asin", requestId);
   }
-  return loadProduct(input, asin, requestId, input.route ?? PRODUCT_BY_ASIN_ROUTE);
+  const parsedFields = parseProductFields(input.fields);
+  if (!parsedFields.ok) {
+    return fail("invalid_request", requestId, parsedFields.message);
+  }
+  return loadProduct(
+    input,
+    asin,
+    requestId,
+    input.route ?? PRODUCT_BY_ASIN_ROUTE,
+    parsedFields.paths,
+  );
 }
 
 export async function getProductByUrl(
@@ -167,6 +181,11 @@ export async function getProductByUrl(
   const parsed = parseAmazonUrl(input.url);
   if (!parsed.ok) {
     return fail(parsed.code, requestId, parsed.message);
+  }
+
+  const parsedFields = parseProductFields(input.fields);
+  if (!parsedFields.ok) {
+    return fail("invalid_request", requestId, parsedFields.message);
   }
 
   let asin: string;
@@ -189,11 +208,13 @@ export async function getProductByUrl(
       key: input.key,
       asin,
       url,
+      fields: input.fields,
       requestId,
     },
     asin,
     requestId,
     PRODUCT_BY_URL_ROUTE,
+    parsedFields.paths,
   );
 }
 
@@ -202,6 +223,7 @@ async function loadProduct(
   asin: string,
   requestId: string,
   route: string,
+  fieldPaths: string[] | null,
 ): Promise<ProductOutcome> {
   const remaining = getCredits(input.db, input.key.id);
   if (remaining === null) {
@@ -221,6 +243,7 @@ async function loadProduct(
         cached: true,
         requestId,
         upstreamMs: 0,
+        fieldPaths,
       });
     }
   }
@@ -265,6 +288,7 @@ async function loadProduct(
     cached: false,
     requestId,
     upstreamMs,
+    fieldPaths,
   });
 }
 
@@ -276,8 +300,9 @@ function succeed(
     cached: boolean;
     requestId: string;
     upstreamMs: number;
+    fieldPaths: string[] | null;
   },
-): Ok<Product> {
+): Ok<Product | Record<string, unknown>> {
   const skipCharge =
     input.key.prefix === "ak_test" && process.env.ASINAPI_TEST_KEYS_FREE === "1";
   let creditsCharged = 0;
@@ -290,8 +315,12 @@ function succeed(
     });
     creditsCharged = charge.ok ? charge.charged : 0;
   }
+  const data =
+    ready.fieldPaths === null
+      ? ready.data
+      : projectFields(ready.data, ready.fieldPaths);
   return {
-    data: ready.data,
+    data,
     meta: {
       cached: ready.cached,
       creditsCharged,
@@ -299,6 +328,12 @@ function succeed(
       upstreamMs: ready.upstreamMs,
     },
   };
+}
+
+function parseProductFields(
+  raw: string | undefined,
+): { ok: true; paths: string[] | null } | { ok: false; message: string } {
+  return parseFields(raw, PRODUCT_FIELD_SCHEMA);
 }
 
 function fail(code: ErrorCode, requestId: string, message?: string): Err {

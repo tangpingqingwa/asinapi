@@ -501,6 +501,9 @@ test("forced adapter 503 on reviews is upstream_blocked and 0 credit", async () 
     async fetchReviews(): Promise<ReviewsAdapterResult> {
       return { ok: false, code: "upstream_blocked" };
     },
+    async fetchSearch() {
+      return { ok: false, code: "upstream_blocked" as const };
+    },
   };
   const { app, db } = await appWithKey(4, blocked);
   const keyRow = db.prepare<[], { id: string }>("SELECT id FROM keys").get();
@@ -606,7 +609,7 @@ test("no live Amazon review hosts are fetched from src or tests", () => {
   }
 });
 
-test("OpenAPI freezes the review page shape and does not add search or offers", () => {
+test("OpenAPI freezes the review page shape and does not add offers", () => {
   const spec = readFileSync(join(ROOT, "openapi/openapi.yaml"), "utf8");
   assert.match(spec, /\/v1\/products\/\{asin\}\/reviews/);
   assert.match(spec, /operationId: getProductReviews/);
@@ -617,7 +620,7 @@ test("OpenAPI freezes the review page shape and does not add search or offers", 
     assert.match(spec, new RegExp(`^        ${field}:`, "m"), field);
   }
   assert.match(spec, /enum:\n\s+- helpful\n\s+- recent/);
-  assert.doesNotMatch(spec, /\/v1\/search/);
+  assert.match(spec, /\/v1\/search/);
   assert.doesNotMatch(spec, /\/offers/);
 });
 

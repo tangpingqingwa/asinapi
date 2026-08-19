@@ -55,7 +55,11 @@ for f in \
   tests/fixtures/html/reviews/B0BOOK0001.p1.helpful.html \
   tests/fixtures/html/reviews/B0VARIATN1.p1.helpful.html \
   tests/fixtures/html/reviews/B0ADULTADJ.p1.helpful.html \
-  tests/fixtures/html/reviews/B0NOREVIEW.p1.helpful.html
+  tests/fixtures/html/reviews/B0NOREVIEW.p1.helpful.html \
+  tests/fixtures/html/search/echo-dot.p1.html \
+  tests/fixtures/html/search/echo-dot.p2.html \
+  tests/fixtures/html/search/blocked.p1.html \
+  tests/fixtures/html/search/empty-query.p1.html
 do
   [[ -f "$f" ]] || fail "missing $f"
   [[ -s "$f" ]] || fail "empty $f"
@@ -66,6 +70,10 @@ grep -q '/v1/products/by-url' openapi/openapi.yaml \
   || fail "openapi.yaml missing GET /v1/products/by-url"
 grep -q '/v1/products/{asin}/reviews' openapi/openapi.yaml \
   || fail "openapi.yaml missing GET /v1/products/{asin}/reviews"
+grep -q '/v1/search' openapi/openapi.yaml \
+  || fail "openapi.yaml missing GET /v1/search"
+grep -q 'name: fields' openapi/openapi.yaml \
+  || fail "openapi.yaml missing fields projection"
 grep -q 'invalid_asin' openapi/openapi.yaml \
   || fail "openapi.yaml missing invalid_asin"
 grep -q 'marketplace_unsupported' openapi/openapi.yaml \
@@ -79,10 +87,12 @@ echo "== llms.txt + MCP tools =="
 [[ -f tests/mcp.test.ts ]] || fail "missing tests/mcp.test.ts"
 grep -q 'get_product' llms.txt || fail "llms.txt missing get_product"
 grep -q 'list_reviews' llms.txt || fail "llms.txt missing list_reviews"
+grep -q 'search_amazon' llms.txt || fail "llms.txt missing search_amazon"
 grep -q 'When not to call' llms.txt || fail "llms.txt missing when-not-to-call"
-if grep -q 'search_amazon' src/mcp/tools.ts; then
-  fail "src/mcp/tools.ts must not ship search (PR 5)"
-fi
+grep -q 'search_amazon' src/mcp/tools.ts || fail "src/mcp/tools.ts missing search_amazon"
+[[ -f src/core/search.ts ]] || fail "missing src/core/search.ts"
+[[ -f src/core/fields.ts ]] || fail "missing src/core/fields.ts"
+[[ -f tests/search.test.ts ]] || fail "missing tests/search.test.ts"
 if grep -E 'GET_OFFERS|list_offers|"offers"' src/mcp/tools.ts >/dev/null 2>&1; then
   fail "src/mcp/tools.ts must not ship offers (PR 6)"
 fi

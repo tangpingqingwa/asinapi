@@ -48,7 +48,8 @@ paths:
       description: >
         One credit on success, including cache hits. Accepts amazon.com/dp/,
         /gp/product/, and already-resolved amzn.to maps. Non-US hosts return
-        marketplace_unsupported and charge 0 credits.
+        marketplace_unsupported and charge 0 credits. Optional fields
+        is a comma-separated dotted projection of the frozen product record.
       parameters:
         - name: url
           in: query
@@ -56,6 +57,7 @@ paths:
           schema:
             type: string
           description: Amazon.com product URL or amzn.to short link
+        - $ref: "#/components/parameters/Fields"
       responses:
         "200":
           description: Typed US product record
@@ -86,7 +88,8 @@ paths:
       description: >
         One credit on success, including cache hits. ASIN is uppercased.
         Anything other than 10 alphanumeric characters is invalid_asin
-        and charges 0 credits.
+        and charges 0 credits. Optional fields is a comma-separated
+        dotted projection of the frozen product record.
       parameters:
         - name: asin
           in: path
@@ -94,6 +97,7 @@ paths:
           schema:
             type: string
             pattern: "^[A-Za-z0-9]{10}$"
+        - $ref: "#/components/parameters/Fields"
       responses:
         "200":
           description: Typed US product record
@@ -109,6 +113,51 @@ paths:
           $ref: "#/components/responses/PaymentRequired"
         "404":
           $ref: "#/components/responses/ProductUnavailable"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/UpstreamBlocked"
+  /v1/search:
+    get:
+      operationId: searchProducts
+      summary: Keyword search of US Amazon listings
+      description: >
+        Charges 1 credit per result returned. page is 1-based and capped
+        at 5. A valid page with hits charges results.length. Empty
+        recorded pages return results=[] and charge 0. Optional fields
+        is a dotted projection of the search page.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Keyword or category query
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+            default: 1
+        - $ref: "#/components/parameters/Fields"
+      responses:
+        "200":
+          description: Search page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -174,6 +223,16 @@ components:
       scheme: bearer
       bearerFormat: API key
       description: ak_live_... or ak_test_...
+  parameters:
+    Fields:
+      name: fields
+      in: query
+      required: false
+      schema:
+        type: string
+      description: >
+        Optional comma-separated dotted paths into data
+        (e.g. title,price.amount or results.asin,results.title).
   schemas:
     ErrorCode:
       type: string
@@ -418,6 +477,64 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Review"
+    SearchResult:
+      type: object
+      additionalProperties: false
+      required:
+        - asin
+        - title
+        - price
+        - rating
+        - url
+        - image
+      properties:
+        asin:
+          type: string
+          pattern: "^[A-Z0-9]{10}$"
+        title:
+          type: string
+          minLength: 1
+        price:
+          $ref: "#/components/schemas/ProductPrice"
+        rating:
+          $ref: "#/components/schemas/ProductRating"
+        url:
+          type: string
+        image:
+          type:
+            - string
+            - "null"
+          description: Remote image URL only
+    SearchPage:
+      type: object
+      additionalProperties: false
+      required:
+        - q
+        - page
+        - hasMore
+        - results
+      properties:
+        q:
+          type: string
+        page:
+          type: integer
+          minimum: 1
+          maximum: 5
+        hasMore:
+          type: boolean
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+    SearchEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/SearchPage"
+        meta:
+          $ref: "#/components/schemas/SuccessMeta"
     ReviewPageEnvelope:
       type: object
       additionalProperties: false

@@ -15,5 +15,8 @@ export function createLiveAmazonAdapter(): ProductAdapter {
     async fetchReviews() {
       return { ok: false, code: "upstream_blocked" as const };
     },
+    async fetchSearch() {
+      return { ok: false, code: "upstream_blocked" as const };
+    },
   };
 }

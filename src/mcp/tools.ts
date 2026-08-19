@@ -2,13 +2,19 @@ import type { ProductAdapter } from "../adapters/types.js";
 import type { Key } from "../billing/keys.js";
 import { getProduct, getProductByUrl, isRetryableCode } from "../core/product.js";
 import { getReviews } from "../core/reviews.js";
+import { searchProducts } from "../core/search.js";
 import type { AsinApiDb } from "../db.js";
 import type { Err, ErrorCode, Ok } from "../types.js";
 
 export const GET_PRODUCT_TOOL = "get_product" as const;
 export const LIST_REVIEWS_TOOL = "list_reviews" as const;
+export const SEARCH_AMAZON_TOOL = "search_amazon" as const;
 
-export const MCP_TOOL_NAMES = [GET_PRODUCT_TOOL, LIST_REVIEWS_TOOL] as const;
+export const MCP_TOOL_NAMES = [
+  GET_PRODUCT_TOOL,
+  LIST_REVIEWS_TOOL,
+  SEARCH_AMAZON_TOOL,
+] as const;
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
 
@@ -50,6 +56,11 @@ export const MCP_TOOLS: readonly McpToolDefinition[] = [
           description:
             "amazon.com/dp/, /gp/product/, or already-resolved amzn.to (one of asin or url required)",
         },
+        fields: {
+          type: "string",
+          description:
+            "Optional comma-separated dotted product fields (e.g. title,price.amount)",
+        },
       },
     },
   },
@@ -77,6 +88,35 @@ export const MCP_TOOLS: readonly McpToolDefinition[] = [
           type: "string",
           enum: ["helpful", "recent"],
           description: "helpful (default) or recent",
+        },
+      },
+    },
+  },
+  {
+    name: SEARCH_AMAZON_TOOL,
+    description:
+      "US Amazon keyword search. Maps to GET /v1/search. Charges 1 credit per " +
+      "result returned. page is 1-based and capped at 5. Prices can be 6h stale. " +
+      "Not for checkout. Do not claim Keepa-like history.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["q"],
+      properties: {
+        q: {
+          type: "string",
+          description: "Keyword or category query",
+        },
+        page: {
+          type: "integer",
+          minimum: 1,
+          maximum: 5,
+          description: "1-based search page, max 5 (default 1)",
+        },
+        fields: {
+          type: "string",
+          description:
+            "Optional comma-separated dotted search-page fields (e.g. results.asin,results.title)",
         },
       },
     },
@@ -112,6 +152,16 @@ export async function callMcpTool(
         page: readPageArg(input.args, "page"),
         sort: readStringArg(input.args, "sort"),
       });
+    case SEARCH_AMAZON_TOOL:
+      return searchProducts({
+        db: input.db,
+        adapter: input.adapter,
+        key: input.key,
+        requestId: input.requestId,
+        q: readStringArg(input.args, "q"),
+        page: readPageArg(input.args, "page"),
+        fields: readStringArg(input.args, "fields"),
+      });
   }
 }
 
@@ -134,6 +184,7 @@ async function dispatchGetProduct(
       key: input.key,
       requestId: input.requestId,
       url,
+      fields: readStringArg(input.args, "fields"),
     });
   }
   return getProduct({
@@ -142,6 +193,7 @@ async function dispatchGetProduct(
     key: input.key,
     requestId: input.requestId,
     asin: asin ?? "",
+    fields: readStringArg(input.args, "fields"),
   });
 }
 

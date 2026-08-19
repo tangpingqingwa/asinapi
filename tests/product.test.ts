@@ -479,6 +479,9 @@ test("forced adapter 503 is upstream_blocked and 0 credit", async () => {
     async fetchReviews() {
       return { ok: false, code: "upstream_blocked" as const };
     },
+    async fetchSearch() {
+      return { ok: false, code: "upstream_blocked" as const };
+    },
   };
   const { app, db } = await appWithKey(4, blocked);
   const keyRow = db.prepare<[], { id: string }>("SELECT id FROM keys").get();
@@ -593,8 +596,78 @@ test("OpenAPI freezes the product field list and every SPEC error code", () => {
   assert.match(spec, /creditsCharged/);
   assert.match(spec, /marketplace_unsupported/);
   assert.match(spec, /invalid_asin/);
-  assert.doesNotMatch(spec, /\/v1\/search/);
+  assert.match(spec, /\/v1\/search/);
+  assert.match(spec, /name: fields/);
   assert.doesNotMatch(spec, /\/offers/);
+});
+
+test("?fields= projects dotted product keys and still charges 1", async () => {
+  const { app, db } = await appWithKey(5);
+  const keyRow = db.prepare<[], { id: string }>("SELECT id FROM keys").get();
+  assert.ok(keyRow);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/v1/products/${BESTSELLER}?fields=title,price.amount,rating.average`,
+    headers: auth(),
+  });
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as {
+    data: Record<string, unknown>;
+    meta: { creditsCharged: number };
+  };
+  assert.deepEqual(Object.keys(body.data).sort(), ["price", "rating", "title"]);
+  assert.equal(body.data.title, "Echo Dot (5th Gen, 2022 release) | Smart speaker with Alexa | Charcoal");
+  assert.deepEqual(body.data.price, { amount: 49.99 });
+  assert.deepEqual(body.data.rating, { average: 4.7 });
+  assert.equal("asin" in body.data, false);
+  assert.equal(body.meta.creditsCharged, 1);
+  assert.equal(getCredits(db, keyRow.id), 4);
+});
+
+test("unknown fields path is 400 invalid_request and 0 credit", async () => {
+  const { app, db } = await appWithKey(3);
+  const keyRow = db.prepare<[], { id: string }>("SELECT id FROM keys").get();
+  assert.ok(keyRow);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/v1/products/${BESTSELLER}?fields=title,notAField`,
+    headers: auth(),
+  });
+  assert.equal(response.statusCode, 400);
+  const body = response.json() as ErrBody;
+  assert.equal(body.error.code, "invalid_request");
+  assert.match(body.error.message, /notAField/);
+  assert.equal(body.meta.creditsCharged, 0);
+  assert.equal(getCredits(db, keyRow.id), 3);
+});
+
+test("fields=attributes keeps the whole best-effort map", async () => {
+  const { app } = await appWithKey();
+  const response = await app.inject({
+    method: "GET",
+    url: `/v1/products/${BESTSELLER}?fields=attributes`,
+    headers: auth(),
+  });
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as { data: Record<string, unknown> };
+  assert.deepEqual(Object.keys(body.data), ["attributes"]);
+  assert.deepEqual(body.data.attributes, { Color: "Charcoal", Generation: "5th" });
+});
+
+test("by-url accepts the same fields projection", async () => {
+  const { app } = await appWithKey();
+  const response = await app.inject({
+    method: "GET",
+    url: `/v1/products/by-url?url=${encodeURIComponent(
+      `https://www.amazon.com/dp/${BESTSELLER}`,
+    )}&fields=asin,brand`,
+    headers: auth(),
+  });
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as { data: Record<string, unknown> };
+  assert.deepEqual(body.data, { asin: BESTSELLER, brand: "Amazon" });
 });
 
 test("fixture HTTP payloads satisfy the frozen Product shape", async () => {
