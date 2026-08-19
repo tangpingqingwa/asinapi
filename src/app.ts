@@ -5,6 +5,7 @@ import { openDatabase, type AsinApiDb } from "./db.js";
 import { healthRoutes } from "./http/routes/health.js";
 import { meRoutes } from "./http/routes/me.js";
 import { productRoutes } from "./http/routes/products.js";
+import { mcpRoutes } from "./mcp/server.js";
 
 export type BuildAppOptions = {
   logger?: boolean;
@@ -34,5 +35,6 @@ export async function buildApp(
   await app.register(healthRoutes);
   await app.register(meRoutes);
   await app.register(productRoutes);
+  await app.register(mcpRoutes);
   return app;
 }

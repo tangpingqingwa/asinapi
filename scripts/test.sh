@@ -13,7 +13,7 @@ fail() {
 }
 
 echo "== contract files =="
-for f in README.md SPEC.md BUILD.md CONTRIBUTING.md scripts/test.sh; do
+for f in README.md SPEC.md BUILD.md CONTRIBUTING.md scripts/test.sh llms.txt; do
   [[ -f "$f" ]] || fail "missing $f"
   [[ -s "$f" ]] || fail "empty $f"
 done
@@ -73,13 +73,29 @@ grep -q 'marketplace_unsupported' openapi/openapi.yaml \
 asin_count="$(grep -c '"asin"' tests/fixtures/asins.json || true)"
 [[ "$asin_count" -eq 50 ]] || fail "asins.json must list 50 ASINs, got ${asin_count}"
 
-echo "== HTTP must not import adapters/amazon =="
-if [[ -d src/http ]] && grep -R --include='*.ts' -l 'adapters/amazon' src/http >/dev/null 2>&1; then
-  fail "src/http imported adapters/amazon"
+echo "== llms.txt + MCP tools =="
+[[ -f src/mcp/server.ts ]] || fail "missing src/mcp/server.ts"
+[[ -f src/mcp/tools.ts ]] || fail "missing src/mcp/tools.ts"
+[[ -f tests/mcp.test.ts ]] || fail "missing tests/mcp.test.ts"
+grep -q 'get_product' llms.txt || fail "llms.txt missing get_product"
+grep -q 'list_reviews' llms.txt || fail "llms.txt missing list_reviews"
+grep -q 'When not to call' llms.txt || fail "llms.txt missing when-not-to-call"
+if grep -q 'search_amazon' src/mcp/tools.ts; then
+  fail "src/mcp/tools.ts must not ship search (PR 5)"
 fi
-if [[ -d src/mcp ]] && grep -R --include='*.ts' -l 'adapters/amazon' src/mcp >/dev/null 2>&1; then
-  fail "src/mcp imported adapters/amazon"
+if grep -E 'GET_OFFERS|list_offers|"offers"' src/mcp/tools.ts >/dev/null 2>&1; then
+  fail "src/mcp/tools.ts must not ship offers (PR 6)"
 fi
+if grep -R --include='*.ts' -E 'fetch\s*\(|https?://www\.amazon\.com/gp/product-api' src/mcp >/dev/null 2>&1; then
+  fail "src/mcp must not call live Amazon"
+fi
+
+echo "== HTTP/MCP do not import adapters/amazon =="
+for dir in src/http src/mcp; do
+  if [[ -d "$dir" ]] && grep -R --include='*.ts' -l 'adapters/amazon' "$dir" >/dev/null 2>&1; then
+    fail "$dir imported adapters/amazon"
+  fi
+done
 
 if [[ -f package.json ]]; then
   echo "== install =="

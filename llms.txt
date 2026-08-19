@@ -1,0 +1,76 @@
+# AsinAPI
+
+> ASIN in. Price, bullets, rating, review page out. No Associates waitlist.
+
+Public US Amazon product + review JSON. Same envelope on REST and MCP. Independent, not Amazon.
+
+Skill: US only; not for checkout; prices can be 6h stale; do not claim Keepa-like history.
+
+## URLs
+
+- REST: https://api.asinapi.dev
+- MCP Streamable HTTP: https://mcp.asinapi.dev/mcp
+- OpenAPI: /openapi/openapi.yaml
+- This file: /llms.txt
+- Server card: /.well-known/mcp/server-card.json
+
+## Auth
+
+```
+Authorization: Bearer ak_live_...
+Authorization: Bearer ak_test_...
+```
+
+Same key space for REST and MCP. No scopes. `ak_test_*` uses recorded fixtures and never hits live Amazon.
+
+## MCP tools
+
+### get_product
+
+Maps to `GET /v1/products/{asin}` or `GET /v1/products/by-url`. **1 credit** on success, including cache hits.
+
+Arguments: `asin` and/or `url` (one required). Accepts `amazon.com/dp/`, `/gp/product/`, and already-resolved `amzn.to` maps.
+
+`data` is the frozen product record (title, price, rating, images as remote URLs, bullets, BSR only if visible). Prices / unavailable can be **6 hours stale**. Product title/bullets/images cache up to 24h. Do not claim Keepa-like history.
+
+### list_reviews
+
+Maps to `GET /v1/products/{asin}/reviews`. **1 credit per page**, including empty pages and cache hits.
+
+Arguments: `asin` (required), optional `page` (1-based, default 1), optional `sort` (`helpful` | `recent`).
+
+Empty page is `{ reviews: [], hasMore: false }`, never 404. Never invent a review.
+
+Search is not shipped. There is no `search_amazon` tool yet. Offers are not shipped.
+
+## When not to call
+
+- Non-US Amazon (`amazon.co.uk`, `amazon.de`, …) — expect `marketplace_unsupported`, 0 credits.
+- Checkout, cart, Buy with Prime, or placing an order — read-only public listing data only.
+- You need live tick-by-tick prices or BSR history graphs — we do not have Keepa-like history; prices can be 6h stale.
+- You need hosted Amazon image bytes — we return remote URLs only.
+- You need other sellers / buy box — offers are not implemented.
+- Keyword search — `search_amazon` is not shipped.
+
+## Errors
+
+Same envelope as REST. `creditsCharged` is always 0 on error.
+
+| code | HTTP | retryable |
+|---|---|---|
+| invalid_request | 400 | no |
+| unauthorized | 401 | no |
+| payment_required | 402 | no |
+| invalid_asin | 400 | no |
+| not_found | 404 | no |
+| product_unavailable | 404 | no |
+| marketplace_unsupported | 422 | no |
+| rate_limited | 429 | yes |
+| upstream_blocked | 503 | yes |
+| internal | 500 | yes |
+
+Failed CAPTCHA / bot wall is `upstream_blocked` and costs **0 credits**. Never invent product fields or review rows.
+
+## Credits
+
+Free: 100 once. Monthly $19 / 2,000. Product 1. Reviews 1 / page. Failures cost 0.
