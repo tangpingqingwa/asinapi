@@ -1,0 +1,390 @@
+openapi: 3.1.0
+info:
+  title: AsinAPI
+  version: 0.1.0
+  description: >
+    REST contract for US Amazon product records. Adding fields is
+    backwards compatible. Removing a field is /v2. Failures never
+    invent product data and never charge credits.
+servers:
+  - url: https://api.asinapi.dev
+    description: Production placeholder
+paths:
+  /healthz:
+    get:
+      operationId: healthz
+      summary: Liveness
+      security: []
+      responses:
+        "200":
+          description: Process is up
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+  /v1/me:
+    get:
+      operationId: getMe
+      summary: Current key, plan, and remaining credits
+      responses:
+        "200":
+          description: Key status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /v1/products/by-url:
+    get:
+      operationId: getProductByUrl
+      summary: Product record from an Amazon URL
+      description: >
+        One credit on success, including cache hits. Accepts amazon.com/dp/,
+        /gp/product/, and already-resolved amzn.to maps. Non-US hosts return
+        marketplace_unsupported and charge 0 credits.
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Amazon.com product URL or amzn.to short link
+      responses:
+        "200":
+          description: Typed US product record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+        "404":
+          $ref: "#/components/responses/ProductUnavailable"
+        "422":
+          $ref: "#/components/responses/MarketplaceUnsupported"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/UpstreamBlocked"
+  /v1/products/{asin}:
+    get:
+      operationId: getProductByAsin
+      summary: Product record by ASIN
+      description: >
+        One credit on success, including cache hits. ASIN is uppercased.
+        Anything other than 10 alphanumeric characters is invalid_asin
+        and charges 0 credits.
+      parameters:
+        - name: asin
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9]{10}$"
+      responses:
+        "200":
+          description: Typed US product record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+        "404":
+          $ref: "#/components/responses/ProductUnavailable"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/UpstreamBlocked"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+      description: ak_live_... or ak_test_...
+  schemas:
+    ErrorCode:
+      type: string
+      enum:
+        - invalid_request
+        - unauthorized
+        - payment_required
+        - invalid_asin
+        - not_found
+        - product_unavailable
+        - marketplace_unsupported
+        - not_implemented
+        - rate_limited
+        - upstream_blocked
+        - internal
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+        retryable:
+          type: boolean
+    ErrorMeta:
+      type: object
+      additionalProperties: false
+      required: [creditsCharged, requestId]
+      properties:
+        creditsCharged:
+          type: integer
+          const: 0
+        requestId:
+          type: string
+          pattern: "^req_"
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorBody"
+        meta:
+          $ref: "#/components/schemas/ErrorMeta"
+    SuccessMeta:
+      type: object
+      additionalProperties: false
+      required: [cached, creditsCharged, requestId, upstreamMs]
+      properties:
+        cached:
+          type: boolean
+        creditsCharged:
+          type: integer
+          minimum: 0
+        requestId:
+          type: string
+          pattern: "^req_"
+        upstreamMs:
+          type: integer
+          minimum: 0
+    ProductPrice:
+      type: object
+      additionalProperties: false
+      required: [amount, currency, display, unavailable]
+      properties:
+        amount:
+          type:
+            - number
+            - "null"
+          description: Major units (USD)
+        currency:
+          type: string
+          const: USD
+        display:
+          type:
+            - string
+            - "null"
+        unavailable:
+          type: boolean
+    ProductRating:
+      type: object
+      additionalProperties: false
+      required: [average, count]
+      properties:
+        average:
+          type:
+            - number
+            - "null"
+        count:
+          type:
+            - integer
+            - "null"
+    ProductBsr:
+      type: object
+      additionalProperties: false
+      required: [rank, category]
+      properties:
+        rank:
+          type: integer
+          minimum: 1
+        category:
+          type: string
+    Product:
+      type: object
+      additionalProperties: false
+      description: Frozen v1 field list. Additions are compatible; removals are /v2.
+      required:
+        - asin
+        - marketplace
+        - title
+        - brand
+        - url
+        - images
+        - price
+        - rating
+        - bullets
+        - description
+        - categoryPath
+        - bsr
+        - attributes
+        - fetchedAt
+      properties:
+        asin:
+          type: string
+          pattern: "^[A-Z0-9]{10}$"
+        marketplace:
+          type: string
+          const: US
+        title:
+          type: string
+          minLength: 1
+        brand:
+          type:
+            - string
+            - "null"
+        url:
+          type: string
+        images:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+          description: Remote image URLs only
+        price:
+          $ref: "#/components/schemas/ProductPrice"
+        rating:
+          $ref: "#/components/schemas/ProductRating"
+        bullets:
+          type: array
+          items:
+            type: string
+        description:
+          type:
+            - string
+            - "null"
+        categoryPath:
+          type: array
+          items:
+            type: string
+        bsr:
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/ProductBsr"
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        fetchedAt:
+          type: string
+          format: date-time
+    ProductEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/Product"
+        meta:
+          $ref: "#/components/schemas/SuccessMeta"
+    MeData:
+      type: object
+      additionalProperties: false
+      required: [key, plan, creditsRemaining, rpm]
+      properties:
+        key:
+          type: object
+          additionalProperties: false
+          required: [id, prefix]
+          properties:
+            id:
+              type: string
+            prefix:
+              type: string
+              enum: [ak_live, ak_test]
+        plan:
+          type: string
+        creditsRemaining:
+          type: integer
+          minimum: 0
+        rpm:
+          type: integer
+          minimum: 0
+    MeEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/MeData"
+        meta:
+          $ref: "#/components/schemas/SuccessMeta"
+  responses:
+    BadRequest:
+      description: Invalid ASIN, missing URL, or malformed request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    PaymentRequired:
+      description: Out of credits
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    ProductUnavailable:
+      description: Product gone, suppressed, or short link not in the fixture map
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    MarketplaceUnsupported:
+      description: Non-US Amazon host
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    RateLimited:
+      description: RPM exceeded
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Internal:
+      description: Server bug
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    UpstreamBlocked:
+      description: Captcha, ban, or bot wall
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+security:
+  - bearerAuth: []

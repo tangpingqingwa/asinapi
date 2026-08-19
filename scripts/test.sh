@@ -37,6 +37,40 @@ echo "== markdown is UTF-8 text =="
 file -b --mime-encoding README.md SPEC.md CONTRIBUTING.md | grep -qiE 'utf-8|us-ascii' \
   || fail "docs are not UTF-8/ASCII"
 
+echo "== product fixtures and OpenAPI =="
+for f in \
+  openapi/openapi.yaml \
+  tests/fixtures/asins.json \
+  tests/fixtures/short-links.json \
+  tests/fixtures/html/B0BESTSELL.html \
+  tests/fixtures/html/B0BOOK0001.html \
+  tests/fixtures/html/B0UNAVAIL0.html \
+  tests/fixtures/html/B0VARIATN1.html \
+  tests/fixtures/html/B0ADULTADJ.html \
+  tests/fixtures/html/B0BLOCKED0.html
+do
+  [[ -f "$f" ]] || fail "missing $f"
+  [[ -s "$f" ]] || fail "empty $f"
+done
+grep -q '/v1/products/{asin}' openapi/openapi.yaml \
+  || fail "openapi.yaml missing GET /v1/products/{asin}"
+grep -q '/v1/products/by-url' openapi/openapi.yaml \
+  || fail "openapi.yaml missing GET /v1/products/by-url"
+grep -q 'invalid_asin' openapi/openapi.yaml \
+  || fail "openapi.yaml missing invalid_asin"
+grep -q 'marketplace_unsupported' openapi/openapi.yaml \
+  || fail "openapi.yaml missing marketplace_unsupported"
+asin_count="$(grep -c '"asin"' tests/fixtures/asins.json || true)"
+[[ "$asin_count" -eq 50 ]] || fail "asins.json must list 50 ASINs, got ${asin_count}"
+
+echo "== HTTP must not import adapters/amazon =="
+if [[ -d src/http ]] && grep -R --include='*.ts' -l 'adapters/amazon' src/http >/dev/null 2>&1; then
+  fail "src/http imported adapters/amazon"
+fi
+if [[ -d src/mcp ]] && grep -R --include='*.ts' -l 'adapters/amazon' src/mcp >/dev/null 2>&1; then
+  fail "src/mcp imported adapters/amazon"
+fi
+
 if [[ -f package.json ]]; then
   echo "== install =="
   if [[ ! -d node_modules ]]; then
@@ -52,6 +86,8 @@ if [[ -f package.json ]]; then
 
   echo "== unit tests =="
   # Quoted so bash 3.2 does not eat **; Node 22's test runner expands the glob.
+  # Fixture adapter only — never hit live Amazon.
+  export ASINAPI_FIXTURE_ONLY=1
   test_log="$(mktemp)"
   trap 'rm -f "$test_log"' EXIT
   set +e
