@@ -598,7 +598,8 @@ test("OpenAPI freezes the product field list and every SPEC error code", () => {
   assert.match(spec, /invalid_asin/);
   assert.match(spec, /\/v1\/search/);
   assert.match(spec, /name: fields/);
-  assert.doesNotMatch(spec, /\/offers/);
+  assert.match(spec, /\/v1\/products\/\{asin\}\/offers/);
+  assert.match(spec, /not_implemented/);
 });
 
 test("?fields= projects dotted product keys and still charges 1", async () => {

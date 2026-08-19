@@ -72,12 +72,19 @@ grep -q '/v1/products/{asin}/reviews' openapi/openapi.yaml \
   || fail "openapi.yaml missing GET /v1/products/{asin}/reviews"
 grep -q '/v1/search' openapi/openapi.yaml \
   || fail "openapi.yaml missing GET /v1/search"
+grep -q '/v1/products/{asin}/offers' openapi/openapi.yaml \
+  || fail "openapi.yaml missing GET /v1/products/{asin}/offers"
+grep -q 'not_implemented' openapi/openapi.yaml \
+  || fail "openapi.yaml missing not_implemented"
 grep -q 'name: fields' openapi/openapi.yaml \
   || fail "openapi.yaml missing fields projection"
 grep -q 'invalid_asin' openapi/openapi.yaml \
   || fail "openapi.yaml missing invalid_asin"
 grep -q 'marketplace_unsupported' openapi/openapi.yaml \
   || fail "openapi.yaml missing marketplace_unsupported"
+if grep -qiE 'offers' README.md >/dev/null 2>&1; then
+  fail "README homepage must not mention offers until 200s"
+fi
 asin_count="$(grep -c '"asin"' tests/fixtures/asins.json || true)"
 [[ "$asin_count" -eq 50 ]] || fail "asins.json must list 50 ASINs, got ${asin_count}"
 
@@ -93,8 +100,10 @@ grep -q 'search_amazon' src/mcp/tools.ts || fail "src/mcp/tools.ts missing searc
 [[ -f src/core/search.ts ]] || fail "missing src/core/search.ts"
 [[ -f src/core/fields.ts ]] || fail "missing src/core/fields.ts"
 [[ -f tests/search.test.ts ]] || fail "missing tests/search.test.ts"
+[[ -f src/core/offers.ts ]] || fail "missing src/core/offers.ts"
+[[ -f tests/offers.test.ts ]] || fail "missing tests/offers.test.ts"
 if grep -E 'GET_OFFERS|list_offers|"offers"' src/mcp/tools.ts >/dev/null 2>&1; then
-  fail "src/mcp/tools.ts must not ship offers (PR 6)"
+  fail "src/mcp/tools.ts must not ship offers"
 fi
 if grep -R --include='*.ts' -E 'fetch\s*\(|https?://www\.amazon\.com/gp/product-api' src/mcp >/dev/null 2>&1; then
   fail "src/mcp must not call live Amazon"

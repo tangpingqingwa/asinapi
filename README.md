@@ -29,7 +29,6 @@ Queries: `amazon product api`, `amazon reviews api`, `asin api`, `product advert
 | `/v1/products/{asin}` | Full product | 1 |
 | `/v1/products/{asin}/reviews` | Review page | 1 / page |
 | `/v1/search` | Keyword / category | 1 / result |
-| `/v1/products/{asin}/offers` | Buy-box / other sellers if stable | 2 |
 
 US marketplace first (`.com`). UK / DE only after US cache and selectors are boring.
 

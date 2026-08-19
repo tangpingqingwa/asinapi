@@ -609,7 +609,7 @@ test("no live Amazon review hosts are fetched from src or tests", () => {
   }
 });
 
-test("OpenAPI freezes the review page shape and does not add offers", () => {
+test("OpenAPI freezes the review page shape; offers stay 501", () => {
   const spec = readFileSync(join(ROOT, "openapi/openapi.yaml"), "utf8");
   assert.match(spec, /\/v1\/products\/\{asin\}\/reviews/);
   assert.match(spec, /operationId: getProductReviews/);
@@ -621,7 +621,8 @@ test("OpenAPI freezes the review page shape and does not add offers", () => {
   }
   assert.match(spec, /enum:\n\s+- helpful\n\s+- recent/);
   assert.match(spec, /\/v1\/search/);
-  assert.doesNotMatch(spec, /\/offers/);
+  assert.match(spec, /\/v1\/products\/\{asin\}\/offers/);
+  assert.match(spec, /not_implemented/);
 });
 
 test("fixture review payloads satisfy the frozen ReviewPage shape", async () => {
