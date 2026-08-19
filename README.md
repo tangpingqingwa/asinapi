@@ -1,5 +1,7 @@
 # AsinAPI
 
+Build contract: [SPEC.md](./SPEC.md).
+
 Amazon product records and reviews by ASIN or URL. One REST call, typed JSON.
 
 Amazon’s Product Advertising API is real and unusable for most builders: you need an Associates account that already sells. The demand did not leave.
