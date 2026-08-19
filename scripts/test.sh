@@ -47,7 +47,15 @@ for f in \
   tests/fixtures/html/B0UNAVAIL0.html \
   tests/fixtures/html/B0VARIATN1.html \
   tests/fixtures/html/B0ADULTADJ.html \
-  tests/fixtures/html/B0BLOCKED0.html
+  tests/fixtures/html/B0BLOCKED0.html \
+  tests/fixtures/html/B0NOREVIEW.html \
+  tests/fixtures/html/reviews/B0BESTSELL.p1.helpful.html \
+  tests/fixtures/html/reviews/B0BESTSELL.p1.recent.html \
+  tests/fixtures/html/reviews/B0BESTSELL.p2.helpful.html \
+  tests/fixtures/html/reviews/B0BOOK0001.p1.helpful.html \
+  tests/fixtures/html/reviews/B0VARIATN1.p1.helpful.html \
+  tests/fixtures/html/reviews/B0ADULTADJ.p1.helpful.html \
+  tests/fixtures/html/reviews/B0NOREVIEW.p1.helpful.html
 do
   [[ -f "$f" ]] || fail "missing $f"
   [[ -s "$f" ]] || fail "empty $f"
@@ -56,6 +64,8 @@ grep -q '/v1/products/{asin}' openapi/openapi.yaml \
   || fail "openapi.yaml missing GET /v1/products/{asin}"
 grep -q '/v1/products/by-url' openapi/openapi.yaml \
   || fail "openapi.yaml missing GET /v1/products/by-url"
+grep -q '/v1/products/{asin}/reviews' openapi/openapi.yaml \
+  || fail "openapi.yaml missing GET /v1/products/{asin}/reviews"
 grep -q 'invalid_asin' openapi/openapi.yaml \
   || fail "openapi.yaml missing invalid_asin"
 grep -q 'marketplace_unsupported' openapi/openapi.yaml \

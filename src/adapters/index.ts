@@ -8,6 +8,10 @@ export type {
   AdapterRequest,
   AdapterResult,
   ProductAdapter,
+  ReviewsAdapterErr,
+  ReviewsAdapterOk,
+  ReviewsAdapterRequest,
+  ReviewsAdapterResult,
 } from "./types.js";
 export { createFixtureAdapter } from "./amazon/fixture.js";
 export { createLiveAmazonAdapter } from "./amazon/index.js";

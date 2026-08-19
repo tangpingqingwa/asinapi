@@ -1,10 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 import { getProduct, getProductByUrl } from "../../core/product.js";
+import { getReviews } from "../../core/reviews.js";
 import { requireAuth } from "../auth.js";
 import { sendErr, sendOk } from "../envelope.js";
 
 export const PRODUCT_BY_ASIN_PATH = "/v1/products/:asin" as const;
 export const PRODUCT_BY_URL_PATH = "/v1/products/by-url" as const;
+export const PRODUCT_REVIEWS_PATH = "/v1/products/:asin/reviews" as const;
 
 type ByUrlQuery = {
   url?: string;
@@ -12,6 +14,11 @@ type ByUrlQuery = {
 
 type AsinParams = {
   asin: string;
+};
+
+type ReviewsQuery = {
+  page?: string;
+  sort?: string;
 };
 
 export const productRoutes: FastifyPluginAsync = async (app) => {
@@ -28,6 +35,34 @@ export const productRoutes: FastifyPluginAsync = async (app) => {
         adapter: request.server.adapter,
         key,
         url: request.query.url,
+      });
+      if ("error" in result) {
+        return sendErr(
+          reply,
+          result.error.code,
+          result.error.message,
+          result.meta.requestId,
+        );
+      }
+      return sendOk(reply, result.data, result.meta);
+    },
+  );
+
+  app.get<{ Params: AsinParams; Querystring: ReviewsQuery }>(
+    PRODUCT_REVIEWS_PATH,
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const key = request.apiKey;
+      if (key === undefined) {
+        return sendErr(reply, "internal", "Authenticated route missing key.");
+      }
+      const result = await getReviews({
+        db: request.server.db,
+        adapter: request.server.adapter,
+        key,
+        asin: request.params.asin,
+        page: request.query.page,
+        sort: request.query.sort,
       });
       if ("error" in result) {
         return sendErr(

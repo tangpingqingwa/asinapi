@@ -76,6 +76,44 @@ export const PRODUCT_FIELDS = [
   "fetchedAt",
 ] as const satisfies readonly (keyof Product)[];
 
+export type ReviewSort = "helpful" | "recent";
+
+export const REVIEW_SORTS = ["helpful", "recent"] as const satisfies readonly ReviewSort[];
+
+export type Review = {
+  id: string | null;
+  title: string | null;
+  body: string;
+  stars: number;
+  createdAt: string | null;
+  verified: boolean | null;
+  author: string | null;
+  country: string | null;
+};
+
+export const REVIEW_FIELDS = [
+  "id",
+  "title",
+  "body",
+  "stars",
+  "createdAt",
+  "verified",
+  "author",
+  "country",
+] as const satisfies readonly (keyof Review)[];
+
+export type ReviewPage = {
+  page: number;
+  hasMore: boolean;
+  reviews: Review[];
+};
+
+export const REVIEW_PAGE_FIELDS = [
+  "page",
+  "hasMore",
+  "reviews",
+] as const satisfies readonly (keyof ReviewPage)[];
+
 export type Ok<T> = {
   data: T;
   meta: { cached: boolean; creditsCharged: number; requestId: string; upstreamMs: number };
