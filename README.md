@@ -2,6 +2,7 @@
 
 Build contract: [SPEC.md](./SPEC.md).
 How we work: [CONTRIBUTING.md](./CONTRIBUTING.md). `main` stays buildable and testable.
+How we build: [BUILD.md](./BUILD.md) — stack, modules, tests, PR sequence.
 
 Amazon product records and reviews by ASIN or URL. One REST call, typed JSON.
 
