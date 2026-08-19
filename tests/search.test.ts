@@ -517,7 +517,8 @@ test("OpenAPI freezes search result fields and page cap", () => {
     assert.match(spec, new RegExp(`^        ${field}:`, "m"), field);
   }
   assert.match(spec, /name: fields/);
-  assert.doesNotMatch(spec, /\/offers/);
+  assert.match(spec, /\/v1\/products\/\{asin\}\/offers/);
+  assert.match(spec, /not_implemented/);
 });
 
 test("fixture search payloads satisfy the frozen SearchPage shape", async () => {

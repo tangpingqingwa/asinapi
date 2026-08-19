@@ -50,6 +50,7 @@ Extra codes:
 | `invalid_asin` | 400 | not a 10-char ASIN |
 | `product_unavailable` | 404 | gone / suppressed |
 | `marketplace_unsupported` | 422 | non-US URL in v1 |
+| `not_implemented` | 501 | offers (and similar) until staging is green; 0 credits |
 | `upstream_blocked` | 503 | captcha / bot wall |
 
 ---

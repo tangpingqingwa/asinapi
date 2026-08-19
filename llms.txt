@@ -45,7 +45,7 @@ Empty page is `{ reviews: [], hasMore: false }`, never 404. Never invent a revie
 
 Maps to `GET /v1/search`. **1 credit per result returned**. Arguments: `q` (required), optional `page` (1-based, default 1, **max 5**), optional `fields`.
 
-Each result: asin, title, price, rating, url, image. A valid search page with hits charges `results.length`. Empty recorded pages still return `{ results: [], hasMore: false }` and charge 0. Search cache is 6h. Offers are not shipped.
+Each result: asin, title, price, rating, url, image. A valid search page with hits charges `results.length`. Empty recorded pages still return `{ results: [], hasMore: false }` and charge 0. Search cache is 6h. REST `GET /v1/products/{asin}/offers` is documented as 501 `not_implemented` (0 credits); MCP does not ship an offers tool.
 
 ## When not to call
 
@@ -69,6 +69,7 @@ Same envelope as REST. `creditsCharged` is always 0 on error.
 | not_found | 404 | no |
 | product_unavailable | 404 | no |
 | marketplace_unsupported | 422 | no |
+| not_implemented | 501 | no |
 | rate_limited | 429 | yes |
 | upstream_blocked | 503 | yes |
 | internal | 500 | yes |

@@ -216,6 +216,27 @@ paths:
           $ref: "#/components/responses/Internal"
         "503":
           $ref: "#/components/responses/UpstreamBlocked"
+  /v1/products/{asin}/offers:
+    get:
+      operationId: getProductOffers
+      summary: Buy-box and other-seller offers (not implemented)
+      description: >
+        Credits will be 2 when the adapter is stable for 7 days in staging.
+        Until then this route returns 501 with error.code = not_implemented
+        and charges 0 credits. Do not advertise on the homepage until 200s.
+        The handler never fetches Amazon.
+      parameters:
+        - name: asin
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9]{10}$"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "501":
+          $ref: "#/components/responses/NotImplemented"
 components:
   securitySchemes:
     bearerAuth:
@@ -621,6 +642,14 @@ components:
             $ref: "#/components/schemas/ErrorEnvelope"
     UpstreamBlocked:
       description: Captcha, ban, or bot wall
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotImplemented:
+      description: >
+        Route is documented but not shipped. Always 0 credits.
+        Used by GET /v1/products/{asin}/offers until staging is green.
       content:
         application/json:
           schema:

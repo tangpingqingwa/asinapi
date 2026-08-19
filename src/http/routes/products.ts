@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { getOffers } from "../../core/offers.js";
 import { getProduct, getProductByUrl } from "../../core/product.js";
 import { getReviews } from "../../core/reviews.js";
 import { requireAuth } from "../auth.js";
@@ -7,6 +8,7 @@ import { sendErr, sendOk } from "../envelope.js";
 export const PRODUCT_BY_ASIN_PATH = "/v1/products/:asin" as const;
 export const PRODUCT_BY_URL_PATH = "/v1/products/by-url" as const;
 export const PRODUCT_REVIEWS_PATH = "/v1/products/:asin/reviews" as const;
+export const PRODUCT_OFFERS_PATH = "/v1/products/:asin/offers" as const;
 
 type ByUrlQuery = {
   url?: string;
@@ -51,6 +53,20 @@ export const productRoutes: FastifyPluginAsync = async (app) => {
         );
       }
       return sendOk(reply, result.data, result.meta);
+    },
+  );
+
+  app.get<{ Params: AsinParams }>(
+    PRODUCT_OFFERS_PATH,
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const result = getOffers({ asin: request.params.asin });
+      return sendErr(
+        reply,
+        result.error.code,
+        result.error.message,
+        result.meta.requestId,
+      );
     },
   );
 
