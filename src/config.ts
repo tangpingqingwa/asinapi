@@ -1,12 +1,26 @@
 const DEFAULT_PORT = 3000;
 const DEFAULT_DATABASE_PATH = "./data/asinapi.sqlite";
 
+export type AmazonAdapterName = "fixture" | "live";
+
 export type AppConfig = {
   port: number;
   databasePath: string;
   bootstrapKey: string | undefined;
   nodeEnv: string;
+  amazonAdapter: AmazonAdapterName;
 };
+
+/** Live adapter is opt-in. ASINAPI_FIXTURE_ONLY=1 always wins so CI stays offline. */
+export function selectAmazonAdapter(
+  env: NodeJS.ProcessEnv = process.env,
+): AmazonAdapterName {
+  if (env.ASINAPI_FIXTURE_ONLY === "1") {
+    return "fixture";
+  }
+  const raw = env.ASINAPI_ADAPTER?.trim().toLowerCase();
+  return raw === "live" ? "live" : "fixture";
+}
 
 export function parseListenPort(value = process.env.PORT): number {
   if (value === undefined || value === "") {
@@ -35,5 +49,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     bootstrapKey:
       bootstrapKey !== undefined && bootstrapKey !== "" ? bootstrapKey : undefined,
     nodeEnv,
+    amazonAdapter: selectAmazonAdapter(env),
   };
 }

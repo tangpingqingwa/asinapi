@@ -47,7 +47,8 @@ paths:
       summary: Product record from an Amazon URL
       description: >
         One credit on success, including cache hits. Accepts amazon.com/dp/,
-        /gp/product/, and already-resolved amzn.to maps. Non-US hosts return
+        /gp/product/, and amzn.to short links (fixture map, or live HEAD
+        follow when ASINAPI_ADAPTER=live). Non-US hosts return
         marketplace_unsupported and charge 0 credits. Optional fields
         is a comma-separated dotted projection of the frozen product record.
       parameters:

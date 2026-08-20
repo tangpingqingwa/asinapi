@@ -191,11 +191,16 @@ export async function getProductByUrl(
   let asin: string;
   let url = parsed.url;
   if (parsed.kind === "short") {
-    const resolved = input.adapter.resolveShortCode(parsed.code);
-    if (resolved === null) {
-      return fail("not_found", requestId);
+    let resolved;
+    try {
+      resolved = await input.adapter.resolveShortCode(parsed.code);
+    } catch {
+      return fail("internal", requestId);
     }
-    asin = resolved;
+    if (!resolved.ok) {
+      return fail(resolved.code, requestId);
+    }
+    asin = resolved.asin;
     url = `https://www.amazon.com/dp/${asin}`;
   } else {
     asin = parsed.asin;
@@ -351,7 +356,7 @@ function newRequestId(): string {
   return `req_${randomUUID()}`;
 }
 
-function marketplaceForHost(host: string): "US" | "unsupported" | null {
+export function marketplaceForHost(host: string): "US" | "unsupported" | null {
   if (US_HOSTS.has(host)) {
     return "US";
   }

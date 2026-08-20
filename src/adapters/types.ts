@@ -21,6 +21,21 @@ export type AdapterFailureCode =
   | "upstream_blocked"
   | "marketplace_unsupported";
 
+export type ResolveShortOk = {
+  ok: true;
+  asin: string;
+};
+
+export type ResolveShortErr = {
+  ok: false;
+  code: Extract<
+    AdapterFailureCode,
+    "upstream_blocked" | "marketplace_unsupported"
+  > | "invalid_asin" | "not_found";
+};
+
+export type ResolveShortResult = ResolveShortOk | ResolveShortErr;
+
 export type AdapterOk = {
   ok: true;
   product: Product;
@@ -58,8 +73,8 @@ export type SearchAdapterErr = {
 export type SearchAdapterResult = SearchAdapterOk | SearchAdapterErr;
 
 export type ProductAdapter = {
-  /** Map an amzn.to path to a canonical ASIN when the fixture already resolved it. */
-  resolveShortCode(code: string): string | null;
+  /** Fixture map, or live HEAD-follow of amzn.to. Never invents an ASIN. */
+  resolveShortCode(code: string): ResolveShortResult | Promise<ResolveShortResult>;
   fetchProduct(request: AdapterRequest): Promise<AdapterResult>;
   fetchReviews(request: ReviewsAdapterRequest): Promise<ReviewsAdapterResult>;
   fetchSearch(request: SearchAdapterRequest): Promise<SearchAdapterResult>;

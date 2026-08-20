@@ -75,3 +75,5 @@ A layout change that drops `title` fails the fixture test.
 - **Acceptance:** 501 0 credits
 
 Live adapter + proxy metrics dashboard = after PR 4, separate chore PRs.
+
+Live adapter is env-gated (`ASINAPI_ADAPTER=live`). Default remains the fixture adapter. `ASINAPI_FIXTURE_ONLY=1` always wins so CI stays offline. `amzn.to` HEAD follow lives only in the live adapter.

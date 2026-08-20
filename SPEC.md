@@ -171,6 +171,8 @@ Images: URLs only. `referrerpolicy=no-referrer` if we ever render them.
 
 HTML snapshot tests for the adapter. Layout change fails CI. No silent field drop.
 
+Live Amazon is opt-in (`ASINAPI_ADAPTER=live`). Default and CI stay on fixture HTML (`ASINAPI_FIXTURE_ONLY=1` always wins). `amzn.to` HTTP HEAD follow is live-adapter only. Failures map to `invalid_asin`, `marketplace_unsupported`, or `upstream_blocked` and charge 0 credits. Never invent a title or review.
+
 ---
 
 ## 8. MCP
