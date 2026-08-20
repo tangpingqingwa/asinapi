@@ -54,7 +54,7 @@ export const MCP_TOOLS: readonly McpToolDefinition[] = [
         url: {
           type: "string",
           description:
-            "amazon.com/dp/, /gp/product/, or already-resolved amzn.to (one of asin or url required)",
+            "amazon.com/dp/, /gp/product/, or amzn.to (fixture map or live HEAD follow)",
         },
         fields: {
           type: "string",

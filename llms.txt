@@ -29,7 +29,7 @@ Same key space for REST and MCP. No scopes. `ak_test_*` uses recorded fixtures a
 
 Maps to `GET /v1/products/{asin}` or `GET /v1/products/by-url`. **1 credit** on success, including cache hits.
 
-Arguments: `asin` and/or `url` (one required). Optional `fields` (comma-separated dotted product paths). Accepts `amazon.com/dp/`, `/gp/product/`, and already-resolved `amzn.to` maps.
+Arguments: `asin` and/or `url` (one required). Optional `fields` (comma-separated dotted product paths). Accepts `amazon.com/dp/`, `/gp/product/`, and `amzn.to` (fixture map, or live HEAD follow when the live adapter is enabled).
 
 `data` is the frozen product record (title, price, rating, images as remote URLs, bullets, BSR only if visible). Prices / unavailable can be **6 hours stale**. Product title/bullets/images cache up to 24h. Do not claim Keepa-like history.
 

@@ -6,7 +6,7 @@ import {
   hashSecret,
   lookupKey,
 } from "../src/billing/keys.js";
-import { loadConfig, parseListenPort } from "../src/config.js";
+import { loadConfig, parseListenPort, selectAmazonAdapter } from "../src/config.js";
 import { openDatabase } from "../src/db.js";
 import { sendErr, sendOk, httpStatusFor, isRetryable } from "../src/http/envelope.js";
 import { ERROR_CODES, type ErrorCode } from "../src/types.js";
@@ -48,6 +48,16 @@ test("loadConfig requires ASINAPI_DATABASE in production", () => {
   });
   assert.equal(config.databasePath, "/tmp/asinapi.sqlite");
   assert.equal(config.bootstrapKey, "ak_test_dev");
+  assert.equal(config.amazonAdapter, "fixture");
+});
+
+test("selectAmazonAdapter is fixture by default and FIXTURE_ONLY beats live", () => {
+  assert.equal(selectAmazonAdapter({}), "fixture");
+  assert.equal(selectAmazonAdapter({ ASINAPI_ADAPTER: "live" }), "live");
+  assert.equal(
+    selectAmazonAdapter({ ASINAPI_ADAPTER: "live", ASINAPI_FIXTURE_ONLY: "1" }),
+    "fixture",
+  );
 });
 
 test("createKey stores a hash and lookupKey finds the row", () => {

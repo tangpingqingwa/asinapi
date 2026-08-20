@@ -102,6 +102,19 @@ grep -q 'search_amazon' src/mcp/tools.ts || fail "src/mcp/tools.ts missing searc
 [[ -f tests/search.test.ts ]] || fail "missing tests/search.test.ts"
 [[ -f src/core/offers.ts ]] || fail "missing src/core/offers.ts"
 [[ -f tests/offers.test.ts ]] || fail "missing tests/offers.test.ts"
+[[ -f src/adapters/amazon/live.ts ]] || fail "missing src/adapters/amazon/live.ts"
+[[ -f src/adapters/amazon/parse.ts ]] || fail "missing src/adapters/amazon/parse.ts"
+[[ -f tests/live-adapter.test.ts ]] || fail "missing tests/live-adapter.test.ts"
+grep -q 'ASINAPI_ADAPTER' src/config.ts \
+  || fail "src/config.ts missing ASINAPI_ADAPTER gate"
+grep -q 'ASINAPI_FIXTURE_ONLY' src/config.ts \
+  || fail "src/config.ts missing ASINAPI_FIXTURE_ONLY override"
+if grep -q 'short-links.json' src/adapters/amazon/live.ts; then
+  fail "live adapter must HEAD-follow amzn.to, not read short-links.json"
+fi
+if grep -E 'fetch\s*\(\s*['\''"]https?://' src/adapters/amazon/live.ts >/dev/null 2>&1; then
+  fail "live adapter must not hard-code fetch() URLs"
+fi
 if grep -E 'GET_OFFERS|list_offers|"offers"' src/mcp/tools.ts >/dev/null 2>&1; then
   fail "src/mcp/tools.ts must not ship offers"
 fi
@@ -131,8 +144,9 @@ if [[ -f package.json ]]; then
 
   echo "== unit tests =="
   # Quoted so bash 3.2 does not eat **; Node 22's test runner expands the glob.
-  # Fixture adapter only — never hit live Amazon.
+  # Fixture adapter only — never hit live Amazon. Live adapter tests inject fetch.
   export ASINAPI_FIXTURE_ONLY=1
+  unset ASINAPI_ADAPTER
   test_log="$(mktemp)"
   trap 'rm -f "$test_log"' EXIT
   set +e
