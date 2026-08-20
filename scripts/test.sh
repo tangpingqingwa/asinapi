@@ -122,6 +122,38 @@ if grep -R --include='*.ts' -E 'fetch\s*\(|https?://www\.amazon\.com/gp/product-
   fail "src/mcp must not call live Amazon"
 fi
 
+echo "== deploy artifacts (Dockerfile + runbook) =="
+[[ -f Dockerfile ]] || fail "missing Dockerfile"
+[[ -f .env.example ]] || fail "missing .env.example"
+[[ -f deploy/runbook.md ]] || fail "missing deploy/runbook.md"
+grep -q 'node:22' Dockerfile || fail "Dockerfile must use Node 22"
+grep -qE '^USER[[:space:]]+node$' Dockerfile || fail "Dockerfile must run as non-root USER node"
+grep -q 'PORT' Dockerfile || fail "Dockerfile must honor PORT"
+grep -q 'src/server.ts' Dockerfile || fail "Dockerfile must start src/server.ts"
+if grep -E 'ASINAPI_ADAPTER[[:space:]]*=[[:space:]]*live' Dockerfile >/dev/null; then
+  fail "Dockerfile must not set ASINAPI_ADAPTER=live"
+fi
+if grep -E 'ASINAPI_FIXTURE_ONLY[[:space:]]*=[[:space:]]*0' Dockerfile >/dev/null; then
+  fail "Dockerfile must not disable ASINAPI_FIXTURE_ONLY"
+fi
+grep -q 'ASINAPI_ADAPTER' .env.example || fail ".env.example missing ASINAPI_ADAPTER"
+grep -q 'ASINAPI_FIXTURE_ONLY' .env.example || fail ".env.example missing ASINAPI_FIXTURE_ONLY"
+grep -q 'ASINAPI_DATABASE' .env.example || fail ".env.example missing ASINAPI_DATABASE"
+grep -q 'ASINAPI_BOOTSTRAP_KEY' .env.example || fail ".env.example missing ASINAPI_BOOTSTRAP_KEY"
+if grep -E '^[[:space:]]*ASINAPI_ADAPTER=live[[:space:]]*$' .env.example >/dev/null; then
+  fail ".env.example must not default ASINAPI_ADAPTER=live"
+fi
+if grep -E '^[[:space:]]*ASINAPI_BOOTSTRAP_KEY=ak_(live|test)_' .env.example >/dev/null; then
+  fail ".env.example must not ship a real bootstrap key"
+fi
+grep -q '/healthz' deploy/runbook.md || fail "runbook missing /healthz"
+grep -q 'ASINAPI_ADAPTER=live' deploy/runbook.md || fail "runbook missing how to enable live"
+grep -q 'docker build' deploy/runbook.md || fail "runbook missing docker build"
+grep -q 'docker run' deploy/runbook.md || fail "runbook missing docker run"
+if grep -qE 'docker-compose|compose\.ya?ml' Dockerfile deploy/runbook.md >/dev/null 2>&1; then
+  fail "one-box deploy is Dockerfile only; do not add docker-compose"
+fi
+
 echo "== HTTP/MCP do not import adapters/amazon =="
 for dir in src/http src/mcp; do
   if [[ -d "$dir" ]] && grep -R --include='*.ts' -l 'adapters/amazon' "$dir" >/dev/null 2>&1; then
